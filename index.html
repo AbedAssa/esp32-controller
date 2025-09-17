@@ -19,16 +19,29 @@
             margin: 0 auto;
         }
         button { 
-            padding: 20px 40px; 
-            margin: 10px; 
-            font-size: 18px; 
+            padding: 25px 50px; 
+            margin: 20px; 
+            font-size: 20px; 
+            font-weight: bold;
             border: none;
-            border-radius: 8px;
+            border-radius: 12px;
             cursor: pointer;
-            min-width: 120px;
+            min-width: 200px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
-        .on { background: #4CAF50; color: white; }
-        .off { background: #f44336; color: white; }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+        .relay-off { 
+            background: linear-gradient(135deg, #4CAF50, #388e3c); 
+            color: white; 
+        }
+        .relay-on { 
+            background: linear-gradient(135deg, #f44336, #d32f2f); 
+            color: white; 
+        }
         input { 
             padding: 12px; 
             font-size: 16px; 
@@ -48,20 +61,44 @@
         .error { background: #f8d7da; color: #721c24; }
         .info { background: #d1ecf1; color: #0c5460; }
         h2 { color: #333; margin-bottom: 30px; }
+        
+        .timer {
+            margin: 20px;
+            padding: 15px;
+            background: #e8f5e8;
+            border: 2px solid #4CAF50;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #2e7d32;
+            display: none;
+        }
+        
+        .timer.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>ESP32 Relay Controller</h2>
+        <h2>Water pump controller</h2>
         <input type="text" id="ip" placeholder="ESP32 IP Address" value="192.168.0.115">
         <br><br>
-        <button class="on" onclick="control(1)">RELAY ON</button>
-        <button class="off" onclick="control(0)">RELAY OFF</button>
+        <button id="toggleButton" class="relay-off" onclick="toggleRelay()">TURN ON</button>
+        
+        <div class="timer" id="timer">
+            ⏱️ Running Time: <span id="timerDisplay">00:00:00</span>
+        </div>
+        
         <div class="status info" id="status">Ready - Enter ESP32 IP and test</div>
     </div>
     
     <script>
-        function control(state) {
+        let relayState = false; // false = OFF, true = ON
+        let timerInterval = null;
+        let startTime = null;
+        
+        function toggleRelay() {
             const ip = document.getElementById('ip').value.trim();
             const status = document.getElementById('status');
             
@@ -74,49 +111,152 @@
             status.textContent = 'Sending command...';
             status.className = 'status info';
             
-            // Method 1: Try with mode: 'no-cors'
-            fetch(`http://${ip}/${state}`, {
+            // Toggle the state: if currently OFF (false) -> turn ON (true), if ON (true) -> turn OFF (false)
+            relayState = !relayState;
+            const commandToSend = relayState ? 1 : 0;
+            
+            // Update button appearance
+            updateButton();
+            
+            // Handle timer
+            if (relayState) {
+                startTimer(); // Start/Reset timer when turning ON
+            } else {
+                stopTimer(); // Stop timer when turning OFF
+            }
+            
+            // Send command to ESP32
+            fetch(`http://${ip}/${commandToSend}`, {
                 method: 'GET',
                 mode: 'no-cors'
             })
             .then(() => {
-                // With no-cors, we can't read the response, but if no error thrown, likely succeeded
-                status.textContent = state ? 'Relay turned ON' : 'Relay turned OFF';
+                status.textContent = relayState ? 'Water pump turned ON' : 'Water pump turned OFF';
                 status.className = 'status success';
             })
             .catch(error => {
                 console.log('Fetch error:', error);
-                // Try alternative method
-                tryAlternativeMethod(ip, state);
+                // Try alternative method with current command
+                tryAlternativeMethod(ip, commandToSend);
             });
         }
         
-        function tryAlternativeMethod(ip, state) {
+        function updateButton() {
+            const button = document.getElementById('toggleButton');
+            if (relayState) {
+                // Relay is ON, so button should be RED to turn it OFF
+                button.className = 'relay-on';
+                button.textContent = 'TURN OFF';
+            } else {
+                // Relay is OFF, so button should be GREEN to turn it ON
+                button.className = 'relay-off';
+                button.textContent = 'TURN ON';
+            }
+        }
+        
+        function startTimer() {
+            // Stop existing timer if running
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+            
+            // Reset start time
+            startTime = new Date();
+            
+            // Show timer display
+            document.getElementById('timer').classList.add('active');
+            
+            // Update timer every second
+            timerInterval = setInterval(updateTimerDisplay, 1000);
+            
+            // Initial display update
+            updateTimerDisplay();
+        }
+        
+        function stopTimer() {
+            // Clear timer interval
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            
+            // Hide timer display
+            document.getElementById('timer').classList.remove('active');
+            
+            // Reset display
+            document.getElementById('timerDisplay').textContent = '00:00:00';
+        }
+        
+        function updateTimerDisplay() {
+            if (!startTime) return;
+            
+            const now = new Date();
+            const elapsed = Math.floor((now - startTime) / 1000); // seconds
+            
+            const hours = Math.floor(elapsed / 3600);
+            const minutes = Math.floor((elapsed % 3600) / 60);
+            const seconds = elapsed % 60;
+            
+            const timeString = 
+                String(hours).padStart(2, '0') + ':' +
+                String(minutes).padStart(2, '0') + ':' +
+                String(seconds).padStart(2, '0');
+            
+            document.getElementById('timerDisplay').textContent = timeString;
+        }
+        
+        function tryAlternativeMethod(ip, commandToSend) {
             const status = document.getElementById('status');
             
             // Method 2: Create hidden iframe (works for same network)
             const iframe = document.createElement('iframe');
             iframe.style.display = 'none';
-            iframe.src = `http://${ip}/${state}`;
+            iframe.src = `http://${ip}/${commandToSend}`;
             
             let timeoutId = setTimeout(() => {
-                document.body.removeChild(iframe);
+                if (document.body.contains(iframe)) {
+                    document.body.removeChild(iframe);
+                }
                 status.textContent = 'Connection timeout - Check IP address and network';
                 status.className = 'status error';
+                // Revert state on timeout
+                relayState = !relayState;
+                updateButton();
+                
+                // Fix timer state on error
+                if (relayState) {
+                    startTimer();
+                } else {
+                    stopTimer();
+                }
             }, 5000);
             
             iframe.onload = function() {
                 clearTimeout(timeoutId);
-                document.body.removeChild(iframe);
-                status.textContent = state ? 'Relay turned ON' : 'Relay turned OFF';
+                if (document.body.contains(iframe)) {
+                    document.body.removeChild(iframe);
+                }
+                status.textContent = relayState ? 'Water pump turned ON' : 'Water pump turned OFF';
                 status.className = 'status success';
             };
             
             iframe.onerror = function() {
                 clearTimeout(timeoutId);
-                document.body.removeChild(iframe);
+                if (document.body.contains(iframe)) {
+                    document.body.removeChild(iframe);
+                }
                 status.textContent = 'Connection failed - Check ESP32 IP and ensure both devices are on same WiFi';
                 status.className = 'status error';
+                // Revert state on error
+                relayState = !relayState;
+                updateButton();
+                
+                // Fix timer state on error
+                if (relayState) {
+                    startTimer();
+                } else {
+                    stopTimer();
+                }
             };
             
             document.body.appendChild(iframe);
@@ -144,6 +284,9 @@
         
         // Auto-test connection when IP changes
         document.getElementById('ip').addEventListener('blur', testConnection);
+        
+        // Initialize button state
+        updateButton();
     </script>
 </body>
 </html>
