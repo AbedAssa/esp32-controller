@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { text-align: center; padding: 50px; }
+        button { padding: 20px; margin: 10px; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <input type="text" id="ip" placeholder="ESP32 IP" value="192.168.1.100">
+    <br><br>
+    <button onclick="control(1)">PIN ON</button>
+    <button onclick="control(0)">PIN OFF</button>
+    
+    <script>
+        function control(state) {
+            const ip = document.getElementById('ip').value;
+            fetch(`http://${ip}/${state}`)
+                .catch(err => alert('Connection failed'));
+        }
+    </script>
+</body>
+</html>
