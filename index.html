@@ -4,22 +4,146 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="manifest" href="manifest.json">
     <style>
-        body { text-align: center; padding: 50px; }
-        button { padding: 20px; margin: 10px; font-size: 18px; }
+        body { 
+            text-align: center; 
+            padding: 50px; 
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        button { 
+            padding: 20px 40px; 
+            margin: 10px; 
+            font-size: 18px; 
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            min-width: 120px;
+        }
+        .on { background: #4CAF50; color: white; }
+        .off { background: #f44336; color: white; }
+        input { 
+            padding: 12px; 
+            font-size: 16px; 
+            width: 200px; 
+            margin: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+        }
+        .status { 
+            margin: 20px; 
+            font-size: 18px; 
+            padding: 10px;
+            border-radius: 5px;
+            min-height: 20px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        h2 { color: #333; margin-bottom: 30px; }
     </style>
 </head>
 <body>
-    <input type="text" id="ip" placeholder="ESP32 IP" value="192.168.1.100">
-    <br><br>
-    <button onclick="control(1)">PIN ON</button>
-    <button onclick="control(0)">PIN OFF</button>
+    <div class="container">
+        <h2>ESP32 Relay Controller</h2>
+        <input type="text" id="ip" placeholder="ESP32 IP Address" value="192.168.0.115">
+        <br><br>
+        <button class="on" onclick="control(1)">RELAY ON</button>
+        <button class="off" onclick="control(0)">RELAY OFF</button>
+        <div class="status info" id="status">Ready - Enter ESP32 IP and test</div>
+    </div>
     
     <script>
         function control(state) {
-            const ip = document.getElementById('ip').value;
-            fetch(`http://${ip}/${state}`)
-                .catch(err => alert('Connection failed'));
+            const ip = document.getElementById('ip').value.trim();
+            const status = document.getElementById('status');
+            
+            if (!ip) {
+                status.textContent = 'Please enter ESP32 IP address';
+                status.className = 'status error';
+                return;
+            }
+            
+            status.textContent = 'Sending command...';
+            status.className = 'status info';
+            
+            // Method 1: Try with mode: 'no-cors'
+            fetch(`http://${ip}/${state}`, {
+                method: 'GET',
+                mode: 'no-cors'
+            })
+            .then(() => {
+                // With no-cors, we can't read the response, but if no error thrown, likely succeeded
+                status.textContent = state ? 'Relay turned ON' : 'Relay turned OFF';
+                status.className = 'status success';
+            })
+            .catch(error => {
+                console.log('Fetch error:', error);
+                // Try alternative method
+                tryAlternativeMethod(ip, state);
+            });
         }
+        
+        function tryAlternativeMethod(ip, state) {
+            const status = document.getElementById('status');
+            
+            // Method 2: Create hidden iframe (works for same network)
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = `http://${ip}/${state}`;
+            
+            let timeoutId = setTimeout(() => {
+                document.body.removeChild(iframe);
+                status.textContent = 'Connection timeout - Check IP address and network';
+                status.className = 'status error';
+            }, 5000);
+            
+            iframe.onload = function() {
+                clearTimeout(timeoutId);
+                document.body.removeChild(iframe);
+                status.textContent = state ? 'Relay turned ON' : 'Relay turned OFF';
+                status.className = 'status success';
+            };
+            
+            iframe.onerror = function() {
+                clearTimeout(timeoutId);
+                document.body.removeChild(iframe);
+                status.textContent = 'Connection failed - Check ESP32 IP and ensure both devices are on same WiFi';
+                status.className = 'status error';
+            };
+            
+            document.body.appendChild(iframe);
+        }
+        
+        // Test connection function
+        function testConnection() {
+            const ip = document.getElementById('ip').value.trim();
+            if (!ip) return;
+            
+            const status = document.getElementById('status');
+            status.textContent = 'Testing connection...';
+            status.className = 'status info';
+            
+            fetch(`http://${ip}/status`, { mode: 'no-cors' })
+            .then(() => {
+                status.textContent = 'Connection test successful!';
+                status.className = 'status success';
+            })
+            .catch(() => {
+                status.textContent = 'Connection test failed - Check IP and network';
+                status.className = 'status error';
+            });
+        }
+        
+        // Auto-test connection when IP changes
+        document.getElementById('ip').addEventListener('blur', testConnection);
     </script>
 </body>
 </html>
