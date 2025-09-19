@@ -150,7 +150,7 @@
             
             // Toggle the state: if currently OFF (false) -> turn ON (true), if ON (true) -> turn OFF (false)
             relayState = !relayState;
-            const commandToSend = relayState ? 1 : 0;
+            const commandToSend = relayState ? 0 : 1;  // Swapped: ON sends 0, OFF sends 1
             
             // Handle timer
             if (relayState) {
