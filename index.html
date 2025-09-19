@@ -34,6 +34,11 @@
             transform: translateY(-2px);
             box-shadow: 0 6px 12px rgba(0,0,0,0.3);
         }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
         .relay-off { 
             background: linear-gradient(135deg, #4CAF50, #388e3c); 
             color: white; 
@@ -41,6 +46,11 @@
         .relay-on { 
             background: linear-gradient(135deg, #f44336, #d32f2f); 
             color: white; 
+        }
+        .button-hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.8);
         }
         input { 
             padding: 12px; 
@@ -77,14 +87,29 @@
         .timer.active {
             display: block;
         }
+        
+        .loading {
+            display: none;
+            margin: 20px;
+            font-size: 18px;
+            color: #666;
+        }
+        
+        .loading.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>Water pump controller</h2>
-        <input type="text" id="ip" placeholder="ESP32 IP Address" value="192.168.0.115">
+        <input type="text" id="ip" placeholder="ESP32 IP Address" value="192.168.0.178">
         <br><br>
         <button id="toggleButton" class="relay-off" onclick="toggleRelay()">TURN ON</button>
+        
+        <div class="loading" id="loading">
+            ⏳ Processing request...
+        </div>
         
         <div class="timer" id="timer">
             ⏱️ Running Time: <span id="timerDisplay">00:00:00</span>
@@ -97,10 +122,15 @@
         let relayState = false; // false = OFF, true = ON
         let timerInterval = null;
         let startTime = null;
+        let isProcessing = false; // Prevent multiple clicks
         
         function toggleRelay() {
+            if (isProcessing) return; // Prevent multiple clicks
+            
             const ip = document.getElementById('ip').value.trim();
             const status = document.getElementById('status');
+            const button = document.getElementById('toggleButton');
+            const loading = document.getElementById('loading');
             
             if (!ip) {
                 status.textContent = 'Please enter ESP32 IP address';
@@ -108,15 +138,19 @@
                 return;
             }
             
+            // Set processing state
+            isProcessing = true;
+            
+            // Hide button and show loading
+            button.classList.add('button-hidden');
+            loading.classList.add('active');
+            
             status.textContent = 'Sending command...';
             status.className = 'status info';
             
             // Toggle the state: if currently OFF (false) -> turn ON (true), if ON (true) -> turn OFF (false)
             relayState = !relayState;
             const commandToSend = relayState ? 1 : 0;
-            
-            // Update button appearance
-            updateButton();
             
             // Handle timer
             if (relayState) {
@@ -133,12 +167,28 @@
             .then(() => {
                 status.textContent = relayState ? 'Water pump turned ON' : 'Water pump turned OFF';
                 status.className = 'status success';
+                finishRequest();
             })
             .catch(error => {
                 console.log('Fetch error:', error);
                 // Try alternative method with current command
                 tryAlternativeMethod(ip, commandToSend);
             });
+        }
+        
+        function finishRequest() {
+            // Update button appearance
+            updateButton();
+            
+            // Show button and hide loading
+            const button = document.getElementById('toggleButton');
+            const loading = document.getElementById('loading');
+            
+            button.classList.remove('button-hidden');
+            loading.classList.remove('active');
+            
+            // Reset processing state
+            isProcessing = false;
         }
         
         function updateButton() {
@@ -221,7 +271,6 @@
                 status.className = 'status error';
                 // Revert state on timeout
                 relayState = !relayState;
-                updateButton();
                 
                 // Fix timer state on error
                 if (relayState) {
@@ -229,6 +278,8 @@
                 } else {
                     stopTimer();
                 }
+                
+                finishRequest();
             }, 5000);
             
             iframe.onload = function() {
@@ -238,6 +289,7 @@
                 }
                 status.textContent = relayState ? 'Water pump turned ON' : 'Water pump turned OFF';
                 status.className = 'status success';
+                finishRequest();
             };
             
             iframe.onerror = function() {
@@ -249,7 +301,6 @@
                 status.className = 'status error';
                 // Revert state on error
                 relayState = !relayState;
-                updateButton();
                 
                 // Fix timer state on error
                 if (relayState) {
@@ -257,6 +308,8 @@
                 } else {
                     stopTimer();
                 }
+                
+                finishRequest();
             };
             
             document.body.appendChild(iframe);
